@@ -2,7 +2,10 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'tile_model.dart';
+import 'highscores_screen.dart';
+
 
 class GameScreen extends StatefulWidget {
   final String playerName;
@@ -96,7 +99,6 @@ class _GameScreenState extends State<GameScreen> {
         _clickCount++;
         
         if (_clickCount == _tilesCount) {
-          // Orthogonal Logic: Score increases by 10 * the current multiplier [cite: 2026-02-11]
           _scoreValue += 10 * _multiplier; 
           _totalRounds++;
           
@@ -123,24 +125,64 @@ class _GameScreenState extends State<GameScreen> {
     }
   }
 
+  // Place this inside _GameScreenState
+  Future<void> _distributeRewards(int playerScore) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final collection = FirebaseFirestore.instance.collection('memory_highscores');
+    
+    // Aggregate queries are efficient and perfect for percentile math
+    AggregateQuerySnapshot totalSnapshot = await collection.count().get();
+    int totalPlayers = totalSnapshot.count ?? 1;
+
+    AggregateQuerySnapshot belowSnapshot = await collection
+        .where('high_score', isLessThan: playerScore)
+        .count()
+        .get();
+    int playersBelow = belowSnapshot.count ?? 0;
+
+    double percentile = (playersBelow / totalPlayers) * 100;
+    int gemsEarned = (percentile / 10).floor(); 
+
+    String uid = FirebaseAuth.instance.currentUser!.uid;
+    await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+      'gems': FieldValue.increment(gemsEarned),
+    });
+    
+    print("Gems Awarded: $gemsEarned (Percentile: ${percentile.toStringAsFixed(1)}%)");
+  }
+
   Future<void> _endGame() async {
     _timer?.cancel();
+    String? newDocId;
     try {
       final CollectionReference highScores = 
           FirebaseFirestore.instance.collection('memory_highscores');
 
-      await highScores.add({
+      DocumentReference docRef = await highScores.add({
         'player_name': widget.playerName,
         'high_score': _scoreValue,
         'timestamp': FieldValue.serverTimestamp(),
       });
-      print("Cloud Save Successful");
+      newDocId = docRef.id;
+
+      // CALL REWARDS HERE after the score is successfully in the DB
+      await _distributeRewards(_scoreValue);
+
     } catch (e) {
-      print("Error saving to Firebase: $e");
+      print("Error in end game sequence: $e");
     }
     
-    if (mounted) Navigator.pop(context);
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => HighscoresScreen(highlightDocId: newDocId),
+        ),
+      );
+    }
   }
+
 
   @override
   Widget build(BuildContext context) {
