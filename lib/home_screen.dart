@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+// Conditional import for web-only functionality
+import 'dart:html' as html; 
+
 import 'game_screen.dart';
 import 'highscores_screen.dart';
 
@@ -18,7 +22,55 @@ class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _passwordController = TextEditingController();
   
   bool _showEmailLogin = false;
-  bool _isRegistering = false; // Toggle between Login and Register
+  bool _isRegistering = false;
+
+  // --- PWA Logic Variables ---
+  dynamic _deferredPrompt;
+  bool _showInstallButton = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupPWAInstallLogic();
+  }
+
+  // --- PWA Logic ---
+  void _setupPWAInstallLogic() {
+    if (kIsWeb) {
+      // Listen for the 'beforeinstallprompt' event
+      html.window.addEventListener('beforeinstallprompt', (event) {
+        // Prevent the browser's default mini-infobar
+        event.preventDefault();
+        // Save the event for later use
+        _deferredPrompt = event;
+        
+        // Only show button if the user is on a mobile device
+        if (_isMobileBrowser()) {
+          setState(() => _showInstallButton = true);
+        }
+      });
+
+      // Hide the button once the app is installed
+      html.window.addEventListener('appinstalled', (event) {
+        setState(() => _showInstallButton = false);
+      });
+    }
+  }
+
+  bool _isMobileBrowser() {
+    final userAgent = html.window.navigator.userAgent.toLowerCase();
+    return userAgent.contains("iphone") || 
+           userAgent.contains("android") || 
+           userAgent.contains("ipad");
+  }
+
+  Future<void> _handlePWAInstall() async {
+    if (_deferredPrompt != null) {
+      _deferredPrompt.prompt();
+      _deferredPrompt = null;
+      setState(() => _showInstallButton = false);
+    }
+  }
 
   // --- Auth Logic ---
 
@@ -33,39 +85,34 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _handleEmailAuth() async {
-  try {
-    final String email = _emailController.text.trim();
-    final String password = _passwordController.text.trim();
-    if (email.isEmpty || password.isEmpty) return;
+    try {
+      final String email = _emailController.text.trim();
+      final String password = _passwordController.text.trim();
+      if (email.isEmpty || password.isEmpty) return;
 
-    UserCredential userCredential;
-    if (_isRegistering) {
-      userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: email, 
-        password: password
-      );
-      // Optional: Update the Firebase Profile name immediately
-      await userCredential.user?.updateDisplayName(_nameController.text.trim());
-    } else {
-      userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email, 
-        password: password
-      );
+      UserCredential userCredential;
+      if (_isRegistering) {
+        userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: email, 
+          password: password
+        );
+        await userCredential.user?.updateDisplayName(_nameController.text.trim());
+      } else {
+        userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: email, 
+          password: password
+        );
+      }
+      await _syncUserProfile(userCredential.user);
+    } on FirebaseAuthException catch (e) {
+      _showError(e.code == 'operation-not-allowed' 
+          ? "Enable Email/Password in Firebase Console!" 
+          : e.message ?? "Auth failed");
     }
-    await _syncUserProfile(userCredential.user);
-  } on FirebaseAuthException catch (e) {
-    // Your existing error handling is great! 
-    _showError(e.code == 'operation-not-allowed' 
-        ? "Enable Email/Password in Firebase Console!" 
-        : e.message ?? "Auth failed");
   }
-}
 
   Future<void> _syncUserProfile(User? user) async {
     if (user == null) return;
-    
-    // If it's an email user, user.displayName might be null.
-    // We use the name from the controller as a fallback.
     String? nameToSave = user.displayName ?? _nameController.text.trim();
     if (nameToSave.isEmpty) nameToSave = "Player";
 
@@ -89,6 +136,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final User? user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
+      // Universal Highscore button at the very bottom
+      bottomNavigationBar: _buildUniversalHighscoreFooter(),
       body: Stack(
         children: [
           if (user != null) _buildGemDisplay(user.uid),
@@ -102,9 +151,56 @@ class _HomeScreenState extends State<HomeScreen> {
                     "GRIDS",
                     style: TextStyle(fontSize: 48, fontWeight: FontWeight.w900, color: Colors.blue),
                   ),
+                  
+                  // PWA INSTALL BUTTON (Conditionally shown)
+                  if (_showInstallButton) ...[
+                    const SizedBox(height: 10),
+                    _buildPWAInstallButton(),
+                  ],
+
                   const SizedBox(height: 40),
                   if (user == null) _buildLoginOptions() else _buildGameMenu(),
                 ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPWAInstallButton() {
+    return ElevatedButton.icon(
+      onPressed: _handlePWAInstall,
+      icon: const Icon(Icons.install_mobile, size: 18),
+      label: const Text("INSTALL APP", style: TextStyle(fontWeight: FontWeight.bold)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.orange.shade800,
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+    );
+  }
+
+  Widget _buildUniversalHighscoreFooter() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Divider(),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton.icon(
+              onPressed: () => Navigator.push(
+                context, 
+                MaterialPageRoute(builder: (context) => const HighscoresScreen())
+              ),
+              icon: const Icon(Icons.leaderboard, color: Colors.blueGrey),
+              label: const Text(
+                "VIEW ALL HIGH SCORES", 
+                style: TextStyle(color: Colors.blueGrey, fontWeight: FontWeight.bold)
               ),
             ),
           ),
@@ -199,7 +295,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            // MAIN ACTION BUTTON
             SizedBox(
               width: double.infinity,
               height: 50,
@@ -218,7 +313,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            // TOGGLE BUTTON (More prominent)
             Container(
               width: double.infinity,
               decoration: BoxDecoration(
@@ -242,7 +336,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
           const Divider(height: 40),
-          // GUEST BUTTON WITH BORDER
           OutlinedButton(
             style: OutlinedButton.styleFrom(
               minimumSize: const Size(double.infinity, 44),
@@ -297,7 +390,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const HighscoresScreen())), child: const Text("View High Scores")),
           TextButton(
             onPressed: () async {
               await FirebaseAuth.instance.signOut();

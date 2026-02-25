@@ -1,12 +1,13 @@
 {
-    "name": "memory_game",
-    "short_name": "memory_game",
-    "start_url": ".",
+    "name": "GRIDS: Memory & Logic",
+    "short_name": "GRIDS",
+    "start_url": "/",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#ffffff",
+    "theme_color": "#2196F3",
+    "description": "An orthogonal logic and memory challenge.",
     "orientation": "portrait-primary",
+    "categories": ["games", "education"],
     "prefer_related_applications": false,
     "icons": [
         {
