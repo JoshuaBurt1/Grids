@@ -5,16 +5,16 @@ import 'home_screen.dart';
 void main() async { 
   WidgetsFlutterBinding.ensureInitialized();  
   await FirebaseConfig.init(); 
-  runApp(const MemoryGameApp());
+  runApp(const GridsGameApp());
 }
 
-class MemoryGameApp extends StatelessWidget {
-  const MemoryGameApp({super.key});
+class GridsGameApp extends StatelessWidget {
+  const GridsGameApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Memory Game',
+      title: 'Grids',
       debugShowCheckedModeBanner: false, 
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),

@@ -99,7 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Text(
-                    "MEMORY GAME",
+                    "GRIDS",
                     style: TextStyle(fontSize: 48, fontWeight: FontWeight.w900, color: Colors.blue),
                   ),
                   const SizedBox(height: 40),

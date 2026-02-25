@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "target": "game-site",
     "public": "build/web",
     "ignore": [
       "firebase.json",

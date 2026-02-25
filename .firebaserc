@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "squarehexagon-games"
+  },
+  "targets": {
+    "squarehexagon-games": {
+      "hosting": {
+        "game-site": [
+          "grids341"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

@@ -1,7 +1,7 @@
-# memory_game
+# Grids
 
-Remember the sequence game.
+Solve the grids.
 
 ## Getting Started
 
-Visit the webpage.
+https://grids341.web.app/
