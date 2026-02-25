@@ -25,6 +25,7 @@ class _GameScreenState extends State<GameScreen> {
   bool _canClick = false;
   bool _showLevelUp = false; 
   Timer? _timer;
+  bool _isEnding = false;
 
   int get _multiplier => _tilesCount - 2;
 
@@ -91,7 +92,9 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _handleCellClick(int index) {
-    if (!_canClick || _cells[index].isHighlighted) return;
+    // 1. IMMEDIATE GUARD: If we are already ending or clicks are disabled, 
+    // exit before even checking the tile logic.
+    if (_isEnding || !_canClick || _cells[index].isHighlighted) return;
 
     if (_cells[index].isCorrect) {
       setState(() {
@@ -121,7 +124,54 @@ class _GameScreenState extends State<GameScreen> {
         }
       });
     } else {
+      // 2. WRONG CLICK: Call end game immediately
       _endGame();
+    }
+  }
+
+  Future<void> _endGame() async {
+    if (_isEnding) return;
+
+    setState(() {
+      _isEnding = true;
+      _canClick = false;
+    });
+
+    _timer?.cancel();
+    String? newDocId; // This is null by default
+
+    try {
+      final CollectionReference highScores = 
+          FirebaseFirestore.instance.collection('memory_highscores');
+
+      // Attempt to add the score
+      DocumentReference docRef = await highScores.add({
+        'player_name': widget.playerName,
+        'high_score': _scoreValue,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+      
+      // Success! Now we have a real ID
+      newDocId = docRef.id;
+
+      await _distributeRewards(_scoreValue);
+
+    } catch (e) {
+      // If it fails (e.g., Guest has no permission), newDocId remains null
+      print("Error in end game sequence: $e");
+    }
+    
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => HighscoresScreen(
+            // Pass the ID, but your HighscoresScreen MUST check if it's null 
+            // before calling Firestore with it.
+            highlightDocId: newDocId, 
+          ),
+        ),
+      );
     }
   }
 
@@ -144,7 +194,6 @@ class _GameScreenState extends State<GameScreen> {
     double percentile = (playersBelow / totalPlayers) * 100;
     int gemsEarned = (percentile / 10).floor(); 
 
-    String uid = FirebaseAuth.instance.currentUser!.uid;
     await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
       'gems': FieldValue.increment(gemsEarned),
     });
@@ -152,46 +201,13 @@ class _GameScreenState extends State<GameScreen> {
     print("Gems Awarded: $gemsEarned (Percentile: ${percentile.toStringAsFixed(1)}%)");
   }
 
-  Future<void> _endGame() async {
-    _timer?.cancel();
-    String? newDocId;
-    try {
-      final CollectionReference highScores = 
-          FirebaseFirestore.instance.collection('memory_highscores');
-
-      DocumentReference docRef = await highScores.add({
-        'player_name': widget.playerName,
-        'high_score': _scoreValue,
-        'timestamp': FieldValue.serverTimestamp(),
-      });
-      newDocId = docRef.id;
-
-      // CALL REWARDS HERE after the score is successfully in the DB
-      await _distributeRewards(_scoreValue);
-
-    } catch (e) {
-      print("Error in end game sequence: $e");
-    }
-    
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => HighscoresScreen(highlightDocId: newDocId),
-        ),
-      );
-    }
-  }
-
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // The debug banner is removed in the MaterialApp wrapper usually, 
-      // but we ensure it's off by setting this property if applicable.
       body: Container(
-        width: double.infinity, // Expand to fill full browser width
-        height: double.infinity, // Expand to fill full browser height
+        width: double.infinity,
+        height: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Column(
           children: [

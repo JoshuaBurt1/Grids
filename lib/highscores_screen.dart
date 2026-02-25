@@ -11,6 +11,28 @@ class HighscoresScreen extends StatefulWidget {
   State<HighscoresScreen> createState() => _HighscoresScreenState();
 }
 
+class _GemDisplay extends StatelessWidget {
+  final int gems;
+  const _GemDisplay({required this.gems});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 16.0),
+      child: Row(
+        children: [
+          const Icon(Icons.diamond, color: Colors.cyanAccent, size: 24),
+          const SizedBox(width: 4),
+          Text(
+            "$gems",
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _HighscoresScreenState extends State<HighscoresScreen> {
   final ItemScrollController _itemScrollController = ItemScrollController();
   bool _showGemAnim = false;
@@ -47,23 +69,22 @@ class _HighscoresScreenState extends State<HighscoresScreen> {
         title: const Text("Rankings"),
         actions: [
           // Gem Counter in AppBar
-          StreamBuilder<DocumentSnapshot>(
-            stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
-            builder: (context, snapshot) {
-              final userData = snapshot.data?.data() as Map<String, dynamic>?;
-              final int gems = userData?['gems'] ?? 0;
-              return Padding(
-                padding: const EdgeInsets.only(right: 16.0),
-                child: Row(
-                  children: [
-                    const Icon(Icons.diamond, color: Colors.cyanAccent, size: 24),
-                    const SizedBox(width: 4),
-                    Text("$gems", style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-                  ],
-                ),
-              );
-            },
-          ),
+          if (uid.isNotEmpty) // <--- ADD THIS CHECK
+            StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+              builder: (context, snapshot) {
+                // If it's loading or has no data, show 0 or a placeholder
+                if (!snapshot.hasData || !snapshot.data!.exists) {
+                  return const _GemDisplay(gems: 0);
+                }
+                
+                final userData = snapshot.data?.data() as Map<String, dynamic>?;
+                final int gems = userData?['gems'] ?? 0;
+                return _GemDisplay(gems: gems);
+              },
+            )
+          else
+            const _GemDisplay(gems: 0), // Show 0 gems for Guests
         ],
       ),
       body: Stack(

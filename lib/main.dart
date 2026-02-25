@@ -5,7 +5,6 @@ import 'home_screen.dart';
 void main() async { 
   WidgetsFlutterBinding.ensureInitialized();  
   await FirebaseConfig.init(); 
-  // We no longer auto-sign in here to avoid the login popup on every refresh
   runApp(const MemoryGameApp());
 }
 
