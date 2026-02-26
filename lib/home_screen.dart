@@ -23,7 +23,6 @@ class _HomeScreenState extends State<HomeScreen> {
   
   bool _showEmailLogin = false;
   bool _isRegistering = false;
-  // Track if we are in Guest Mode to show the Game Menu without a Firebase User
   bool _isGuestMode = false;
 
   // --- PWA Logic Variables ---
@@ -39,21 +38,27 @@ class _HomeScreenState extends State<HomeScreen> {
   // --- PWA Logic ---
   void _setupPWAInstallLogic() {
     if (kIsWeb) {
+      // 1. Check if already installed
       if (_isAlreadyInstalled()) return;
 
+      // 2. Listen for the 'beforeinstallprompt' event
       html.window.addEventListener('beforeinstallprompt', (event) {
-        event.preventDefault(); 
+        // Prevent the browser's default mini-infobar
+        event.preventDefault();
         _deferredPrompt = event;
-        
+
+        // Only show button if on a mobile device
         if (_isMobileDevice()) {
           setState(() => _showInstallButton = true);
         }
       });
 
+      // 3. Hide the button once successfully installed
       html.window.addEventListener('appinstalled', (event) {
         setState(() => _showInstallButton = false);
       });
 
+      // 4. iOS Fallback: Safari doesn't fire 'beforeinstallprompt'
       if (_isIOSDevice() && !_isAlreadyInstalled()) {
         setState(() => _showInstallButton = true);
       }
@@ -74,7 +79,11 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isMobileDevice() {
     final userAgent = html.window.navigator.userAgent.toLowerCase();
     final isModernIpad = userAgent.contains("macintosh") && html.window.navigator.maxTouchPoints! > 0;
-    return userAgent.contains("iphone") || userAgent.contains("android") || userAgent.contains("ipad") || isModernIpad;
+    
+    return userAgent.contains("iphone") || 
+           userAgent.contains("android") || 
+           userAgent.contains("ipad") ||
+           isModernIpad;
   }
 
   bool _isIOSDevice() {
