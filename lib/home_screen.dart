@@ -23,6 +23,8 @@ class _HomeScreenState extends State<HomeScreen> {
   
   bool _showEmailLogin = false;
   bool _isRegistering = false;
+  // Track if we are in Guest Mode to show the Game Menu without a Firebase User
+  bool _isGuestMode = false;
 
   // --- PWA Logic Variables ---
   dynamic _deferredPrompt;
@@ -37,27 +39,21 @@ class _HomeScreenState extends State<HomeScreen> {
   // --- PWA Logic ---
   void _setupPWAInstallLogic() {
     if (kIsWeb) {
-      // 1. If it's already installed and open, do not show the button.
       if (_isAlreadyInstalled()) return;
 
-      // 2. Listen for Android/Chrome automatic prompt
       html.window.addEventListener('beforeinstallprompt', (event) {
-        event.preventDefault(); // Prevent default mini-infobar
+        event.preventDefault(); 
         _deferredPrompt = event;
         
-        // Only show button if on a mobile device
         if (_isMobileDevice()) {
           setState(() => _showInstallButton = true);
         }
       });
 
-      // 3. Hide the button once successfully installed
       html.window.addEventListener('appinstalled', (event) {
         setState(() => _showInstallButton = false);
       });
 
-      // 4. iOS Fallback: Safari doesn't fire 'beforeinstallprompt'. 
-      // If it's an iOS device and not installed, show the button anyway to display instructions.
       if (_isIOSDevice() && !_isAlreadyInstalled()) {
         setState(() => _showInstallButton = true);
       }
@@ -65,46 +61,34 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   bool _isAlreadyInstalled() {
-    // Standard PWA check
     final isStandalone = html.window.matchMedia('(display-mode: standalone)').matches;
-    
-    // Apple-specific PWA check
     bool isIosStandalone = false;
     try {
-      // This will throw a NoSuchMethodError on non-iOS browsers, 
       isIosStandalone = (html.window.navigator as dynamic).standalone == true;
     } catch (e) {
       isIosStandalone = false; 
     }
-    
     return isStandalone || isIosStandalone;
   }
 
   bool _isMobileDevice() {
     final userAgent = html.window.navigator.userAgent.toLowerCase();
     final isModernIpad = userAgent.contains("macintosh") && html.window.navigator.maxTouchPoints! > 0;
-    
-    return userAgent.contains("iphone") || 
-           userAgent.contains("android") || 
-           userAgent.contains("ipad") ||
-           isModernIpad;
+    return userAgent.contains("iphone") || userAgent.contains("android") || userAgent.contains("ipad") || isModernIpad;
   }
 
   bool _isIOSDevice() {
     final userAgent = html.window.navigator.userAgent.toLowerCase();
     final isModernIpad = userAgent.contains("macintosh") && html.window.navigator.maxTouchPoints! > 0;
-    
     return userAgent.contains("iphone") || userAgent.contains("ipad") || isModernIpad;
   }
 
   Future<void> _handlePWAInstall() async {
     if (_deferredPrompt != null) {
-      // Trigger the native Android/Chrome install prompt
       _deferredPrompt.prompt();
       _deferredPrompt = null;
       setState(() => _showInstallButton = false);
     } else if (_isIOSDevice()) {
-      // Show instructional dialog for iOS users
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
@@ -131,6 +115,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       GoogleAuthProvider googleProvider = GoogleAuthProvider();
       UserCredential userCredential = await FirebaseAuth.instance.signInWithPopup(googleProvider);
+      setState(() => _isGuestMode = false); // Ensure guest mode is off on real login
       await _syncUserProfile(userCredential.user);
     } catch (e) {
       _showError("Google Sign-In Error: $e");
@@ -156,6 +141,7 @@ class _HomeScreenState extends State<HomeScreen> {
           password: password
         );
       }
+      setState(() => _isGuestMode = false);
       await _syncUserProfile(userCredential.user);
     } on FirebaseAuthException catch (e) {
       _showError(e.code == 'operation-not-allowed' 
@@ -189,30 +175,22 @@ class _HomeScreenState extends State<HomeScreen> {
     final User? user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      // Universal Highscore button at the very bottom
       bottomNavigationBar: _buildUniversalHighscoreFooter(),
       body: Stack(
         children: [
-          if (user != null) _buildGemDisplay(user.uid),
           SizedBox.expand(
             child: Padding(
               padding: const EdgeInsets.all(40.0),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text(
-                    "GRIDS",
-                    style: TextStyle(fontSize: 48, fontWeight: FontWeight.w900, color: Colors.blue),
-                  ),
-                  
-                  // PWA INSTALL BUTTON (Conditionally shown)
                   if (_showInstallButton) ...[
-                    const SizedBox(height: 10),
                     _buildPWAInstallButton(),
+                    const SizedBox(height: 20),
                   ],
 
-                  const SizedBox(height: 40),
-                  if (user == null) _buildLoginOptions() else _buildGameMenu(),
+                  // Show Menu if logged in OR if Guest Mode is active
+                  if (user == null && !_isGuestMode) _buildLoginOptions() else _buildGameMenu(),
                 ],
               ),
             ),
@@ -261,147 +239,138 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
-  Widget _buildGemDisplay(String uid) {
-    return Positioned(
-      top: 40,
-      right: 20,
-      child: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) return const SizedBox();
-          final data = snapshot.data!.data() as Map<String, dynamic>?;
-          final int gems = data?['gems'] ?? 0;
-
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
+  
+  Widget _buildLoginOptions() {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 420),
+      child: AspectRatio(
+        aspectRatio: 1.0,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.blue.shade100, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.blue.withOpacity(0.05),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              )
+            ],
+          ),
+          child: Center(
+            child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.diamond, color: Colors.cyanAccent, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  "$gems",
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.blue),
+                const Text(
+                  "GRIDS",
+                  style: TextStyle(
+                    fontSize: 38,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.blue,
+                    letterSpacing: 2,
+                  ),
                 ),
+                const SizedBox(height: 20),
+
+                if (!_showEmailLogin) ...[
+                  _buildGoogleButton(),
+                  const SizedBox(height: 12),
+                  OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 45),
+                      side: const BorderSide(color: Colors.blue),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () => setState(() => _showEmailLogin = true),
+                    child: const Text("Sign in with Email"),
+                  ),
+                  const Divider(height: 30),
+                  OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 40),
+                      side: BorderSide(color: Colors.grey.shade300),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () {
+                      // Transition to Game Menu as Guest
+                      setState(() {
+                        _isGuestMode = true;
+                        _nameController.text = "Guest";
+                      });
+                    },
+                    child: const Text("Play as Guest",
+                        style: TextStyle(color: Colors.grey, fontSize: 13)),
+                  ),
+                ] else ...[
+                  if (_isRegistering)
+                    _buildCompactField(_nameController, "Player Name"),
+                  
+                  _buildCompactField(_emailController, "Email"),
+                  _buildCompactField(_passwordController, "Password (min 6 chars)", obscure: true),
+                  
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 45,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _isRegistering ? Colors.green : Colors.blue,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: _handleEmailAuth,
+                      child: Text(
+                        _isRegistering ? "CREATE ACCOUNT" : "LOGIN",
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => setState(() => _isRegistering = !_isRegistering),
+                    child: Text(
+                      _isRegistering ? "Already have an account? Login" : "NEW USER? REGISTER HERE",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _isRegistering ? Colors.blue : Colors.orange.shade800,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => _showEmailLogin = false),
+                    child: const Text("Back", style: TextStyle(color: Colors.blueGrey, fontSize: 12)),
+                  ),
+                ],
               ],
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildLoginOptions() {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 300),
-      child: Column(
-        children: [
-          _buildGoogleButton(),
-          const SizedBox(height: 12),
-          if (!_showEmailLogin)
-            OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
-                side: const BorderSide(color: Colors.blue),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              onPressed: () => setState(() => _showEmailLogin = true),
-              child: const Text("Sign in with Email"),
-            )
-          else ...[
-            if (_isRegistering)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: TextField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(
-                    hintText: "Player Name",
-                    filled: true,
-                    fillColor: Color(0xFFF0F7FF),
-                    border: OutlineInputBorder(borderSide: BorderSide.none),
-                  ),
-                ),
-              ),
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(
-                hintText: "Email",
-                filled: true,
-                fillColor: Color(0xFFF0F7FF),
-                border: OutlineInputBorder(borderSide: BorderSide.none),
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                hintText: "Password (min 6 chars)",
-                filled: true,
-                fillColor: Color(0xFFF0F7FF),
-                border: OutlineInputBorder(borderSide: BorderSide.none),
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _isRegistering ? Colors.green : Colors.blue,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: _handleEmailAuth,
-                child: Text(
-                  _isRegistering ? "CREATE ACCOUNT" : "LOGIN",
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: TextButton(
-                onPressed: () => setState(() => _isRegistering = !_isRegistering),
-                child: Text(
-                  _isRegistering ? "Already have an account? Login" : "NEW USER? REGISTER HERE",
-                  style: TextStyle(
-                    color: _isRegistering ? Colors.blue : Colors.orange.shade800,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: () => setState(() => _showEmailLogin = false),
-              child: const Text("Back"),
-            ),
-          ],
-          const Divider(height: 40),
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 44),
-              side: BorderSide(color: Colors.grey.shade300),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const GameScreen(playerName: "Guest")),
-            ),
-            child: const Text("Play as Guest (No Saving)", style: TextStyle(color: Colors.grey)),
-          ),
-        ],
+  Widget _buildCompactField(TextEditingController controller, String hint, {bool obscure = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: TextField(
+        controller: controller,
+        obscureText: obscure,
+        decoration: InputDecoration(
+          hintText: hint,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          filled: true,
+          fillColor: const Color(0xFFF0F7FF),
+          border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none),
+        ),
       ),
     );
   }
@@ -416,41 +385,124 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildGameMenu() {
+    final User? user = FirebaseAuth.instance.currentUser;
+
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 400),
-      child: Column(
-        children: [
-          TextField(
-            controller: _nameController,
-            textAlign: TextAlign.center,
-            decoration: InputDecoration(
-              hintText: "Enter Player Name",
-              filled: true,
-              fillColor: Colors.blue.shade50,
-              border: UnderlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+      child: AspectRatio(
+        aspectRatio: 1.0, 
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.blue.shade100, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.blue.withOpacity(0.05),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  )
+                ],
+              ),
+              child: Center(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        "GRIDS",
+                        style: TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: Colors.blue, letterSpacing: 2),
+                      ),
+                      const SizedBox(height: 30),
+                      TextField(
+                        controller: _nameController,
+                        textAlign: TextAlign.center,
+                        // If guest, the name is locked
+                        readOnly: _isGuestMode,
+                        decoration: InputDecoration(
+                          hintText: "Enter Player Name",
+                          filled: true,
+                          fillColor: _isGuestMode ? Colors.grey.shade100 : Colors.blue.shade50,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        ),
+                      ),
+                      const SizedBox(height: 30),
+                      Row(
+                        children: [
+                          Text("GAME MODE", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue.shade300, letterSpacing: 1.2)),
+                          const Expanded(child: Divider(indent: 10)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () {
+                            String name = _nameController.text.trim().isEmpty ? "Guest" : _nameController.text.trim();
+                            Navigator.push(context, MaterialPageRoute(builder: (context) => GameScreen(playerName: name)));
+                          },
+                          child: const Text("Memory Game", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextButton(
+                        onPressed: () async {
+                          if (_isGuestMode) {
+                            setState(() {
+                              _isGuestMode = false;
+                              _nameController.clear();
+                            });
+                          } else {
+                            await FirebaseAuth.instance.signOut();
+                            setState(() {});
+                          }
+                        },
+                        child: Text(_isGuestMode ? "Exit Guest Mode" : "Sign Out", 
+                            style: TextStyle(color: Colors.red.shade300, fontSize: 13)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-              onPressed: () {
-                String name = _nameController.text.trim().isEmpty ? "Guest" : _nameController.text.trim();
-                Navigator.push(context, MaterialPageRoute(builder: (context) => GameScreen(playerName: name)));
-              },
-              child: const Padding(padding: EdgeInsets.all(16.0), child: Text("Start Game")),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextButton(
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-              setState(() {});
-            },
-            child: Text("Sign Out", style: TextStyle(color: Colors.red.shade300, fontSize: 12)),
-          ),
-        ],
+            // Gem Display: Only render if NOT in Guest Mode and user is signed in
+            if (!_isGuestMode && user != null)
+              Positioned(
+                top: 15,
+                right: 15,
+                child: StreamBuilder<DocumentSnapshot>(
+                  stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) return const SizedBox();
+                    final data = snapshot.data!.data() as Map<String, dynamic>?;
+                    final int gems = data?['gems'] ?? 0;
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(10)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.diamond, color: Colors.cyan, size: 16),
+                          const SizedBox(width: 6),
+                          Text("$gems", style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.blue)),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
