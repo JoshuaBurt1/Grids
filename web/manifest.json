@@ -1,6 +1,7 @@
 {
     "name": "GRIDS: Memory & Logic",
     "short_name": "GRIDS",
+    "id": "/",
     "start_url": "/",
     "display": "standalone",
     "background_color": "#ffffff",
@@ -31,6 +32,20 @@
             "sizes": "512x512",
             "type": "image/png",
             "purpose": "maskable"
+        }
+    ],
+    "screenshots": [
+        {
+        "src": "screenshots/mobile.png",
+        "sizes": "1080x1920",
+        "type": "image/png",
+        "form_factor": "narrow"
+        },
+        {
+        "src": "screenshots/desktop.png",
+        "sizes": "1920x1016",
+        "type": "image/png",
+        "form_factor": "wide"
         }
     ]
 }

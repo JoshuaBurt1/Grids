@@ -37,38 +37,91 @@ class _HomeScreenState extends State<HomeScreen> {
   // --- PWA Logic ---
   void _setupPWAInstallLogic() {
     if (kIsWeb) {
-      // Listen for the 'beforeinstallprompt' event
+      // 1. If it's already installed and open, do not show the button.
+      if (_isAlreadyInstalled()) return;
+
+      // 2. Listen for Android/Chrome automatic prompt
       html.window.addEventListener('beforeinstallprompt', (event) {
-        // Prevent the browser's default mini-infobar
-        event.preventDefault();
-        // Save the event for later use
+        event.preventDefault(); // Prevent default mini-infobar
         _deferredPrompt = event;
         
-        // Only show button if the user is on a mobile device
-        if (_isMobileBrowser()) {
+        // Only show button if on a mobile device
+        if (_isMobileDevice()) {
           setState(() => _showInstallButton = true);
         }
       });
 
-      // Hide the button once the app is installed
+      // 3. Hide the button once successfully installed
       html.window.addEventListener('appinstalled', (event) {
         setState(() => _showInstallButton = false);
       });
+
+      // 4. iOS Fallback: Safari doesn't fire 'beforeinstallprompt'. 
+      // If it's an iOS device and not installed, show the button anyway to display instructions.
+      if (_isIOSDevice() && !_isAlreadyInstalled()) {
+        setState(() => _showInstallButton = true);
+      }
     }
   }
 
-  bool _isMobileBrowser() {
+  bool _isAlreadyInstalled() {
+    // Standard PWA check
+    final isStandalone = html.window.matchMedia('(display-mode: standalone)').matches;
+    
+    // Apple-specific PWA check
+    bool isIosStandalone = false;
+    try {
+      // This will throw a NoSuchMethodError on non-iOS browsers, 
+      isIosStandalone = (html.window.navigator as dynamic).standalone == true;
+    } catch (e) {
+      isIosStandalone = false; 
+    }
+    
+    return isStandalone || isIosStandalone;
+  }
+
+  bool _isMobileDevice() {
     final userAgent = html.window.navigator.userAgent.toLowerCase();
+    final isModernIpad = userAgent.contains("macintosh") && html.window.navigator.maxTouchPoints! > 0;
+    
     return userAgent.contains("iphone") || 
            userAgent.contains("android") || 
-           userAgent.contains("ipad");
+           userAgent.contains("ipad") ||
+           isModernIpad;
+  }
+
+  bool _isIOSDevice() {
+    final userAgent = html.window.navigator.userAgent.toLowerCase();
+    final isModernIpad = userAgent.contains("macintosh") && html.window.navigator.maxTouchPoints! > 0;
+    
+    return userAgent.contains("iphone") || userAgent.contains("ipad") || isModernIpad;
   }
 
   Future<void> _handlePWAInstall() async {
     if (_deferredPrompt != null) {
+      // Trigger the native Android/Chrome install prompt
       _deferredPrompt.prompt();
       _deferredPrompt = null;
       setState(() => _showInstallButton = false);
+    } else if (_isIOSDevice()) {
+      // Show instructional dialog for iOS users
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text("Install on iOS", style: TextStyle(color: Colors.blue)),
+          content: const Text(
+            "To install GRIDS, tap the 'Share' icon in your Safari menu bar and select 'Add to Home Screen'.",
+            style: TextStyle(height: 1.4),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Got it!", style: TextStyle(fontWeight: FontWeight.bold)),
+            )
+          ],
+        )
+      );
     }
   }
 
