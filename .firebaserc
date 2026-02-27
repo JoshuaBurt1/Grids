@@ -1,9 +1,9 @@
 {
   "projects": {
-    "default": "squarehexagon-games"
+    "default": "squarehexagon-holdings"
   },
   "targets": {
-    "squarehexagon-games": {
+    "squarehexagon-holdings": {
       "hosting": {
         "game-site": [
           "grids341"
