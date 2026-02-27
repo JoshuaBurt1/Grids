@@ -404,7 +404,7 @@ class _HomeScreenState extends State<HomeScreen> {
           clipBehavior: Clip.none,
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0), // Reduced vertical padding
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
@@ -424,25 +424,26 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       const Text(
                         "GRIDS",
-                        style: TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: Colors.blue, letterSpacing: 2),
+                        style: TextStyle(fontSize: 36, fontWeight: FontWeight.w900, color: Colors.blue, letterSpacing: 2), // Slightly smaller title
                       ),
-                      const SizedBox(height: 30),
+                      const SizedBox(height: 20), // Reduced spacing
                       TextField(
                         controller: _nameController,
                         textAlign: TextAlign.center,
-                        // If guest, the name is locked
                         readOnly: _isGuestMode,
+                        style: const TextStyle(fontSize: 14), // Smaller font for consistency
                         decoration: InputDecoration(
                           hintText: "Enter Player Name",
+                          contentPadding: const EdgeInsets.symmetric(vertical: 12), // Tighter field
                           filled: true,
                           fillColor: _isGuestMode ? Colors.grey.shade100 : Colors.blue.shade50,
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                         ),
                       ),
-                      const SizedBox(height: 30),
+                      const SizedBox(height: 24),
                       Row(
                         children: [
-                          Text("GAME MODE", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue.shade300, letterSpacing: 1.2)),
+                          Text("GAME MODE", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue.shade300, letterSpacing: 1.2)),
                           const Expanded(child: Divider(indent: 10)),
                         ],
                       ),
@@ -453,17 +454,18 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            elevation: 0, // Matches flat look of login options
+                            padding: const EdgeInsets.symmetric(vertical: 14), // Smaller vertical padding
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
                           onPressed: () {
                             String name = _nameController.text.trim().isEmpty ? "Guest" : _nameController.text.trim();
                             Navigator.push(context, MaterialPageRoute(builder: (context) => GameScreen(playerName: name)));
                           },
-                          child: const Text("Memory Game", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          child: const Text("Memory Game", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), // Smaller font
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       TextButton(
                         onPressed: () async {
                           if (_isGuestMode) {
@@ -484,7 +486,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-            // Gem Display: Only render if NOT in Guest Mode and user is signed in
             if (!_isGuestMode && user != null)
               Positioned(
                 top: 15,
@@ -501,9 +502,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.diamond, color: Colors.cyan, size: 16),
+                          const Icon(Icons.diamond, color: Colors.cyan, size: 14), // Slightly smaller icon
                           const SizedBox(width: 6),
-                          Text("$gems", style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.blue)),
+                          Text("$gems", style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.blue)),
                         ],
                       ),
                     );
